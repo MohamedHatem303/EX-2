@@ -9,69 +9,132 @@
     if (!toggle) {
       toggle = document.createElement("i");
       toggle.className = "open-close-icon fa fa-align-justify";
-      (header || side).prepend(toggle);
+      if (header) header.appendChild(toggle);
+      else if (side) side.prepend(toggle);
     }
 
-    if (getComputedStyle(side).pointerEvents === "none") side.style.pointerEvents = "auto";
+    if (header) {
+      const firstDiv = header.querySelector("div");
+      if (firstDiv) firstDiv.classList.add("nav-icons");
+      if (!header.querySelector(".open-close-placeholder")) {
+        const placeholder = document.createElement("div");
+        placeholder.className = "open-close-placeholder";
+        placeholder.style.display = "none";
+        header.appendChild(placeholder);
+      }
+    }
 
     const OPEN = "open";
-    const tabW = () =>
-      (tab.offsetWidth || +getComputedStyle(document.documentElement).getPropertyValue("--tab-width") || 300);
+    const MOBILE_BREAK = 991;
+    const isMobile = () => window.innerWidth <= MOBILE_BREAK;
 
-    const apply = (open) => {
-      tab.style.transform = open ? "translateX(0)" : "translateX(-100%)";
-      (header || side).style.transform = open ? `translateX(${tabW()}px)` : "translateX(0)";
-    };
+    if (!side || !tab) return;
+
+    function apply(open) {
+      if (isMobile()) {
+        side.style.position = "fixed";
+        side.style.inset = "0";
+        side.style.width = "100%";
+        side.style.height = "100vh";
+        side.style.zIndex = "2000";
+        side.style.pointerEvents = open ? "auto" : "none";
+
+        const headerHeight = header ? header.offsetHeight : 60;
+        tab.style.position = "absolute";
+        tab.style.top = `${headerHeight}px`;
+        tab.style.left = "0";
+        tab.style.width = "100%";
+        tab.style.height = `calc(100vh - ${headerHeight}px)`;
+        tab.style.transform = open ? "translateY(0)" : "translateY(-100%)";
+        tab.style.transition = "transform 280ms ease";
+        tab.style.boxShadow = "none";
+        tab.style.pointerEvents = open ? "auto" : "none";
+      } else {
+        side.style.position = "";
+        side.style.inset = "";
+        side.style.width = "";
+        side.style.height = "";
+        side.style.zIndex = "";
+        side.style.pointerEvents = "";
+
+        tab.style.position = "";
+        tab.style.top = "";
+        tab.style.left = "";
+        tab.style.width = "";
+        tab.style.height = "";
+        tab.style.transform = open ? "translateX(0)" : "translateX(-100%)";
+        tab.style.transition = "transform 300ms ease";
+        tab.style.pointerEvents = "auto";
+        (header || side).style.transform = open ? `translateX(${tab.offsetWidth || 300}px)` : "translateX(0)";
+      }
+    }
 
     let isOpen = side.classList.contains(OPEN);
     apply(isOpen);
 
-    const open = () => {
+    function openMenu() {
       isOpen = true;
       side.classList.add(OPEN);
       toggle.classList.replace("fa-align-justify", "fa-xmark");
       apply(true);
-      animateLinks();
-    };
-    const close = () => {
-      isOpen = false;
-      side.classList.remove(OPEN);
-      toggle.classList.replace("fa-xmark", "fa-align-justify");
-      apply(false);
-    };
-
-    function animateLinks() {
       links.forEach((li, i) => {
         li.classList.remove("animate__animated", "animate__fadeInUp");
         void li.offsetWidth;
-        li.style.animationDelay = `${i * 0.12}s`;
+        li.style.animationDelay = `${i * 0.08}s`;
         li.classList.add("animate__animated", "animate__fadeInUp");
       });
     }
 
+    function closeMenu() {
+      isOpen = false;
+      side.classList.remove(OPEN);
+      toggle.classList.replace("fa-xmark", "fa-align-justify");
+      apply(false);
+    }
+
     toggle.addEventListener("click", (e) => {
       e.stopPropagation();
-      isOpen ? close() : open();
+      isOpen ? closeMenu() : openMenu();
     });
+
     toggle.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
         toggle.click();
       }
     });
-    tab.addEventListener("click", (e) => {
-      if (e.target.closest("li")) close();
-    });
+
     document.addEventListener("click", (e) => {
       if (!isOpen) return;
-      if (!side.contains(e.target)) close();
+      const target = e.target;
+      if (!side.contains(target) && !header.contains(target)) closeMenu();
     });
+
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") close();
+      if (e.key === "Escape") closeMenu();
+    });
+
+    tab.addEventListener("click", (e) => {
+      const li = e.target.closest("li");
+      const a = e.target.closest("a");
+      if (li || a) closeMenu();
+    });
+
+    let resizeTimer;
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        if (isOpen) closeMenu();
+        if (!isMobile()) {
+          tab.style.transform = "translateX(-100%)";
+          (header || side).style.transform = "";
+        } else {
+          tab.style.transform = "translateY(-100%)";
+        }
+      }, 120);
     });
   });
 })();
-
 
 let rowData = document.getElementById("rowData");
 let searchContainer = document.getElementById("searchContainer");
@@ -97,7 +160,7 @@ function showSearchInputs() {
 }
 function showContacts() {
   searchContainer.innerHTML = "";
-  rowData.innerHTML = `<div class="contact min-vh-100 d-flex justify-content-center align-items-center">
+  rowData.innerHTML = `<div class="contact d-flex justify-content-center align-items-center">
     <div class="container w-75 text-center">
         <div class="row g-4">
             <div class="col-md-6">
@@ -144,21 +207,17 @@ function showContacts() {
 async function searchByName(term) {
   rowData.innerHTML = "";
   showLoader();
-
   let res = await fetch(`https://www.themealdb.com/api/json/v1/1/search.php?s=${term}`);
   let data = await res.json();
-
   hideLoader();
   displayMeals(data.meals || []);
 }
 async function searchByFLetter(letter) {
   rowData.innerHTML = "";
   showLoader();
-
   letter = letter || "a";
   let res = await fetch(`https://www.themealdb.com/api/json/v1/1/search.php?f=${letter}`);
   let data = await res.json();
-
   hideLoader();
   displayMeals(data.meals || []);
 }
@@ -166,10 +225,8 @@ async function getCategories() {
   searchContainer.innerHTML = "";
   rowData.innerHTML = "";
   showLoader();
-
   let res = await fetch("https://www.themealdb.com/api/json/v1/1/categories.php");
   let data = await res.json();
-
   hideLoader();
   displayCategories(data.categories);
 }
@@ -177,10 +234,8 @@ async function getArea() {
   searchContainer.innerHTML = "";
   rowData.innerHTML = "";
   showLoader();
-
   let res = await fetch("https://www.themealdb.com/api/json/v1/1/list.php?a=list");
   let data = await res.json();
-
   hideLoader();
   displayArea(data.meals);
 }
@@ -188,88 +243,65 @@ async function getIngredients() {
   searchContainer.innerHTML = "";
   rowData.innerHTML = "";
   showLoader();
-
   let res = await fetch("https://www.themealdb.com/api/json/v1/1/list.php?i=list");
   let data = await res.json();
-
   hideLoader();
   displayIngredients(data.meals.slice(0, 20));
 }
 async function getCategoryMeals(c) {
   rowData.innerHTML = "";
   showLoader();
-
   let res = await fetch(`https://www.themealdb.com/api/json/v1/1/filter.php?c=${c}`);
   let data = await res.json();
-
   hideLoader();
   displayMeals(data.meals.slice(0, 20));
 }
 async function getAreaMeals(a) {
   rowData.innerHTML = "";
   showLoader();
-
   let res = await fetch(`https://www.themealdb.com/api/json/v1/1/filter.php?a=${a}`);
   let data = await res.json();
-
   hideLoader();
   displayMeals(data.meals.slice(0, 20));
 }
 async function getIngredientsMeals(i) {
   rowData.innerHTML = "";
   showLoader();
-
   let res = await fetch(`https://www.themealdb.com/api/json/v1/1/filter.php?i=${i}`);
   let data = await res.json();
-
   hideLoader();
   displayMeals(data.meals.slice(0, 20));
 }
 async function getMealDetails(id) {
   rowData.innerHTML = "";
   showLoader();
-
   let res = await fetch(`https://www.themealdb.com/api/json/v1/1/lookup.php?i=${id}`);
   let data = await res.json();
   let m = data.meals[0];
-
   hideLoader();
-
   let ingredients = "";
   for (let i = 1; i <= 20; i++) {
     if (m[`strIngredient${i}`]) {
-      ingredients += `<li class="alert alert-info m-1 p-1">
-        ${m[`strMeasure${i}`]} ${m[`strIngredient${i}`]}
-      </li>`;
+      ingredients += `<li class="alert alert-info m-1 p-1">${m[`strMeasure${i}`]} ${m[`strIngredient${i}`]}</li>`;
     }
   }
-
   let tags = m.strTags ? m.strTags.split(",") : [];
-  let tagsStr = tags
-    .map(tag => `<li class="alert alert-danger m-1 p-1">${tag}</li>`)
-    .join("");
-
+  let tagsStr = tags.map(tag => `<li class="alert alert-danger m-1 p-1">${tag}</li>`).join("");
   rowData.innerHTML = `
     <div class="col-md-4">
       <img class="w-100 rounded-3" src="${m.strMealThumb}">
       <h2>${m.strMeal}</h2>
     </div>
-
     <div class="col-md-8">
       <h3>Instructions</h3>
       <p>${m.strInstructions}</p>
-
       <h4>Area: ${m.strArea}</h4>
       <h4>Category: ${m.strCategory}</h4>
-
       <h4>Recipes:</h4>
       <ul class="list-unstyled d-flex flex-wrap">${ingredients}</ul>
-
       <h4>Tags:</h4>
       <ul class="list-unstyled d-flex flex-wrap">${tagsStr}</ul>
-
       ${m.strSource ? `<a target="_blank" href="${m.strSource}" class="btn btn-success me-2">Source</a>` : ""}
-
       <a target="_blank" href="${m.strYoutube}" class="btn btn-danger">Youtube</a>
     </div>
   `;
@@ -281,77 +313,41 @@ function displayMeals(arr) {
   }
   let cartona = "";
   for (let i = 0; i < arr.length; i++) {
-    cartona += `
-      <div class="col-md-3">
-        <div onclick="getMealDetails('${arr[i].idMeal}')" class="meal position-relative overflow-hidden">
-          <img class="w-100" src="${arr[i].strMealThumb}">
-          <div class="meal-layer position-absolute p-2 text-center text-black d-flex align-items-center">
-            <h3>${arr[i].strMeal}</h3>
-          </div>
-        </div>
-      </div>
-    `;
+    cartona += `<div class="col-md-3"><div onclick="getMealDetails('${arr[i].idMeal}')" class="meal position-relative overflow-hidden"><img class="w-100" src="${arr[i].strMealThumb}"><div class="meal-layer position-absolute p-2 text-center text-black d-flex align-items-center"><h3>${arr[i].strMeal}</h3></div></div></div>`;
   }
   rowData.innerHTML = cartona;
 }
-
 function displayCategories(arr) {
   let cartona = "";
   for (let i = 0; i < arr.length; i++) {
-    cartona += `
-      <div class="col-md-3">
-        <div onclick="getCategoryMeals('${arr[i].strCategory}')" class="meal position-relative overflow-hidden">
-          <img class="w-100" src="${arr[i].strCategoryThumb}">
-          <div class="meal-layer position-absolute p-2 text-center text-black d-flex align-items-center">
-            <h3>${arr[i].strCategory}</h3>
-          </div>
-        </div>
-      </div>
-    `;
+    cartona += `<div class="col-md-3"><div onclick="getCategoryMeals('${arr[i].strCategory}')" class="meal position-relative overflow-hidden"><img class="w-100" src="${arr[i].strCategoryThumb}"><div class="meal-layer position-absolute p-2 text-center text-black d-flex align-items-center"><h3>${arr[i].strCategory}</h3></div></div></div>`;
   }
   rowData.innerHTML = cartona;
 }
-
 function displayArea(arr) {
   let cartona = "";
   for (let i = 0; i < arr.length; i++) {
-    cartona += `
-      <div class="col-md-3 text-center cursor-pointer" onclick="getAreaMeals('${arr[i].strArea}')">
-        <i class="fa-solid fa-house-laptop fa-3x"></i>
-        <h4>${arr[i].strArea}</h4>
-      </div>
-    `;
+    cartona += `<div class="col-md-3 text-center cursor-pointer" onclick="getAreaMeals('${arr[i].strArea}')"><i class="fa-solid fa-house-laptop fa-3x"></i><h4>${arr[i].strArea}</h4></div>`;
   }
   rowData.innerHTML = cartona;
 }
-
 function displayIngredients(arr) {
   let cartona = "";
   for (let i = 0; i < arr.length; i++) {
-    cartona += `
-      <div class="col-md-3 text-center cursor-pointer" onclick="getIngredientsMeals('${arr[i].strIngredient}')">
-        <i class="fa-solid fa-drumstick-bite fa-3x"></i>
-        <h4>${arr[i].strIngredient}</h4>
-        <p>${arr[i].strDescription.split(" ").slice(0,20).join(" ")}</p>
-      </div>
-    `;
+    cartona += `<div class="col-md-3 text-center cursor-pointer" onclick="getIngredientsMeals('${arr[i].strIngredient}')"><i class="fa-solid fa-drumstick-bite fa-3x"></i><h4>${arr[i].strIngredient}</h4><p>${arr[i].strDescription.split(" ").slice(0,20).join(" ")}</p></div>`;
   }
   rowData.innerHTML = cartona;
 }
-
 searchByName("");
 function $(id){ return document.getElementById(id); }
-
 function nameValidation() { const e = $("nameInput"); if(!e) return false; return /^[a-zA-Z ]+$/.test(e.value.trim()); }
 function emailValidation() { const e = $("emailInput"); if(!e) return false; return /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/.test(e.value.trim()); }
 function phoneValidation() { const e = $("phoneInput"); if(!e) return false; return /^[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/.test(e.value.trim()); }
 function ageValidation() { const e = $("ageInput"); if(!e) return false; return /^(0?[1-9]|[1-9][0-9]|[1][1-9][1-9]|200)$/.test(e.value.trim()); }
 function passwordValidation() { const e = $("passwordInput"); if(!e) return false; return /^(?=.*\d)(?=.*[a-z])[0-9a-zA-Z]{8,}$/.test(e.value); }
 function repasswordValidation() { const p = $("passwordInput"), r = $("repasswordInput"); if(!p||!r) return false; return r.value === p.value && r.value.length>0; }
-
 function showAlert(id){ const a=$(id); if(!a) return; a.style.display = "block"; a.classList.remove("d-none"); }
 function hideAlert(id){ const a=$(id); if(!a) return; a.style.display = "none"; a.classList.add("d-none"); }
-
 function inputsValidation(){
   const fields = [
     {id:"nameInput", alert:"nameAlert", valid:nameValidation},
@@ -361,7 +357,6 @@ function inputsValidation(){
     {id:"passwordInput", alert:"passwordAlert", valid:passwordValidation},
     {id:"repasswordInput", alert:"repasswordAlert", valid:repasswordValidation},
   ];
-
   let allValid = true;
   fields.forEach(f=>{
     const inp=$(f.id);
@@ -369,51 +364,39 @@ function inputsValidation(){
     if(!inp || !$(alId)){ allValid=false; return; }
     const val = inp.value.trim();
     const touched = inp.dataset.touched === "true";
-
-    if(val === ""){ hideAlert(alId); allValid = false; return; } 
-
-    if(!touched){ hideAlert(alId); allValid = false; return; } 
-
+    if(val === ""){ hideAlert(alId); allValid = false; return; }
+    if(!touched){ hideAlert(alId); allValid = false; return; }
     if(!f.valid()){ showAlert(alId); allValid = false; } else { hideAlert(alId); }
   });
-
   const submitBtn = $("submitBtn");
   if(!submitBtn) return;
   if(allValid) submitBtn.removeAttribute("disabled"); else submitBtn.setAttribute("disabled","true");
 }
-
 function initContactValidation(){
   function setup(){
     const name = $("nameInput"); const submitBtn = $("submitBtn");
     if(!name || !submitBtn) return false;
-
     const inputs = ["nameInput","emailInput","phoneInput","ageInput","passwordInput","repasswordInput"]
       .map(id=>$(id)).filter(Boolean);
-
     ["nameAlert","emailAlert","phoneAlert","ageAlert","passwordAlert","repasswordAlert"].forEach(id=>{
       const a=$(id); if(a){ a.style.display = "none"; a.classList.add("d-none"); }
     });
-
     function onInput(e){
       const t = e.target;
       if(t.value.trim().length > 0) t.dataset.touched = "true";
       inputsValidation();
     }
-
     inputs.forEach(i=>{
       i.removeEventListener("input", onInput);
       i.addEventListener("input", onInput);
       i.removeEventListener("blur", inputsValidation);
       i.addEventListener("blur", inputsValidation);
     });
-
     submitBtn.removeEventListener("click", onSubmit);
     submitBtn.addEventListener("click", onSubmit);
-
     inputsValidation();
     return true;
   }
-
   function onSubmit(e){
     e.preventDefault();
     const btn = $("submitBtn");
@@ -427,11 +410,9 @@ function initContactValidation(){
       inputsValidation();
     }
   }
-
   if(!setup()){
     const obs = new MutationObserver((mut, ob)=>{ if(setup()) ob.disconnect(); });
     obs.observe(document.body, { childList:true, subtree:true });
   }
 }
-
 initContactValidation();
